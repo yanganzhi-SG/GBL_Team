@@ -1,18 +1,31 @@
 import streamlit as st
 import pandas as pd
 import itertools
+import requests
+
+# =====================================================
+# 🔑 GEMINI API KEYS (PUT YOUR KEYS HERE)
+# =====================================================
+
+GEMINI_KEYS = [
+    "AIzaSyBgXQuKQsahIUbfJ2bJ0hewjxhCBThxgZo",
+    "AIzaSyBluOzXVSItFulOip-APayR18w1jm1b8QE",
+    "AIzaSyC5rnO3ASEVzGd8W-DSAFjgzTrfEA4XzFg",
+    "AIzaSyARNFj-KwfpOvyrbqarm9_juitYg_ilb1w",
+    "AIzaSyCRj9zqBpQXA3OO-7qrb5xD1GaSulk5bQ4"
+]
 
 # =====================================================
 # PAGE SETUP
 # =====================================================
 
 st.set_page_config(
-    page_title="GL Team Forge",
+    page_title="GL AI Team Forge",
     layout="wide"
 )
 
-st.title("⚔️ GL Team Forge")
-st.caption("Pokémon GO Great League Team Builder")
+st.title("⚔️ GL AI Team Forge")
+st.caption("AI-powered Pokémon GO Great League builder")
 
 # =====================================================
 # LOAD CSV
@@ -20,14 +33,19 @@ st.caption("Pokémon GO Great League Team Builder")
 
 @st.cache_data
 def load_data():
+
     df = pd.read_csv("cp1500_all_overall_rankings.csv")
+
     df.columns = df.columns.str.strip()
+
     df["Pokemon"] = df["Pokemon"].astype(str).str.strip()
+
     return df
 
 
 df = load_data()
-pokemon_list = sorted(df["Pokemon"].unique())
+
+pokemon_list = sorted(df["Pokemon"].dropna().unique())
 
 # =====================================================
 # SESSION STATE
@@ -40,50 +58,105 @@ if "swap_index" not in st.session_state:
     st.session_state.swap_index = 0
 
 # =====================================================
-# HELPERS
+# GEMINI CALL (WITH FALLBACK KEYS)
+# =====================================================
+
+def call_gemini(prompt):
+
+    for key in GEMINI_KEYS:
+
+        try:
+
+            url = f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={key}"
+
+            payload = {
+                "contents": [
+                    {
+                        "parts": [
+                            {"text": prompt}
+                        ]
+                    }
+                ]
+            }
+
+            r = requests.post(url, json=payload, timeout=10)
+
+            if r.status_code == 200:
+
+                data = r.json()
+
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+
+        except:
+            continue
+
+    return None
+
+# =====================================================
+# AI TEAMMATE SUGGESTION
+# =====================================================
+
+def ai_suggest(pokemon):
+
+    prompt = f"""
+You are a Pokémon GO Great League expert.
+
+Given Pokémon: {pokemon}
+
+Pick the BEST 2 teammates for a strong 3-Pokémon PvP team.
+
+Rules:
+- Must be real Pokémon GO meta picks
+- Focus on type coverage + synergy
+- Include common meta Pokémon (Lanturn, Skarmory, Galarian Stunfisk, Trevenant, Medicham, etc)
+
+Return EXACT format:
+
+1. <pokemon>
+2. <pokemon>
+"""
+
+    response = call_gemini(prompt)
+
+    if not response:
+        return []
+
+    lines = response.split("\n")
+
+    results = []
+
+    for line in lines:
+
+        line = line.strip()
+
+        if line.startswith(("1.", "2.")):
+
+            name = line.split(".", 1)[1].strip()
+
+            if name in pokemon_list:
+                results.append(name)
+
+    return results[:2]
+
+# =====================================================
+# FALLBACK SUGGESTION
+# =====================================================
+
+def suggest_teammates(pokemon):
+
+    result = ai_suggest(pokemon)
+
+    if len(result) == 2:
+        return result
+
+    return list(pd.Series(pokemon_list).sample(2))
+
+# =====================================================
+# GET ROW
 # =====================================================
 
 def get_row(name):
     return df[df["Pokemon"] == name].iloc[0]
-
-
-def type_score(a, b):
-
-    # simple synergy score: stats + diversity
-    ra = get_row(a)
-    rb = get_row(b)
-
-    score = 0
-
-    # stat balance
-    score += abs(float(ra["Defense"]) - float(rb["Attack"])) * 0.5
-
-    # type diversity bonus
-    if ra["Type 1"] != rb["Type 1"]:
-        score += 20
-
-    if ra.get("Type 2", "") != rb.get("Type 2", ""):
-        score += 10
-
-    return score
-
-
-def suggest_teammates(pokemon):
-
-    candidates = [
-        p for p in pokemon_list
-        if p != pokemon
-    ]
-
-    scored = []
-
-    for c in candidates:
-        scored.append((c, type_score(pokemon, c)))
-
-    scored.sort(key=lambda x: x[1], reverse=True)
-
-    return [s[0] for s in scored[:10]]
-
 
 # =====================================================
 # SEARCH
@@ -93,50 +166,47 @@ st.subheader("🔍 Search Pokémon")
 
 search = st.text_input("Type Pokémon name")
 
-def move_card(name):
-
-    row = get_row(name)
-
-    st.markdown(f"### {name}")
-    st.caption(f"{row['Type 1']} / {row.get('Type 2','')}")
-
-    st.write(f"⚡ Fast: {row['Fast Move']}")
-    st.write(f"🔥 {row['Charged Move 1']}")
-    st.write(f"💥 {row['Charged Move 2']}")
-
-
 if search:
 
     matches = [
         p for p in pokemon_list
         if search.lower() in p.lower()
-    ][:8]
+    ][:10]
 
     for name in matches:
 
-        col1, col2 = st.columns([5, 1])
+        row = get_row(name)
+
+        col1, col2, col3 = st.columns([4, 4, 1])
 
         with col1:
-            move_card(name)
+            st.markdown(f"### {name}")
+            st.caption(f"{row['Type 1']} / {row.get('Type 2','')}")
 
         with col2:
+            st.write(f"⚡ Fast: {row['Fast Move']}")
+            st.write(f"🔥 {row['Charged Move 1']}")
+            st.write(f"💥 {row['Charged Move 2']}")
+
+        with col3:
 
             if st.button("Add", key=f"add_{name}"):
 
                 if len(st.session_state.team) < 6:
+
                     if name not in st.session_state.team:
                         st.session_state.team.append(name)
                         st.rerun()
 
 # =====================================================
-# TEAM DISPLAY + SUGGESTIONS
+# TEAM DISPLAY + AI SUGGESTIONS
 # =====================================================
 
 st.divider()
-st.subheader("🛡️ Your Team")
+st.subheader("🛡️ Your Team (AI Suggested Synergy)")
 
 if not st.session_state.team:
-    st.info("No Pokémon added yet.")
+    st.info("Add Pokémon to start building your team.")
 
 for i, p in enumerate(st.session_state.team):
 
@@ -146,51 +216,43 @@ for i, p in enumerate(st.session_state.team):
 
     with col1:
 
-        move_card(p)
+        st.markdown(f"### {p}")
+
+        st.write(f"⚡ Fast: {row['Fast Move']}")
+        st.write(f"🔥 {row['Charged Move 1']}")
+        st.write(f"💥 {row['Charged Move 2']}")
 
     with col2:
 
-        st.markdown("### 🤝 Suggested Teammates")
+        st.markdown("### 🤖 AI Teammates")
 
         suggestions = suggest_teammates(p)
 
-        # show 2 suggestions only
-        shown = suggestions[:2]
+        if not suggestions:
+            st.warning("AI failed, using fallback.")
 
-        for j, s in enumerate(shown):
+        for j, s in enumerate(suggestions):
 
             if s in st.session_state.team:
-
                 st.success(f"✔ {s} (Already in team)")
             else:
-
-                st.warning(f"{s}")
+                st.info(s)
 
                 if st.button(
-                    f"Change → {s}",
+                    f"Swap → {s}",
                     key=f"swap_{i}_{j}"
                 ):
 
-                    # replace current pokemon with suggestion
                     st.session_state.team[i] = s
                     st.rerun()
 
-        # CHANGE RANDOM BUTTON
-        if st.button(f"🔁 Suggest New", key=f"new_{i}"):
+        if st.button("🔁 New Suggestions", key=f"new_{i}"):
 
             st.session_state.swap_index += 1
-
-            new_suggestion = suggestions[
-                st.session_state.swap_index % len(suggestions)
-            ]
-
-            if new_suggestion not in st.session_state.team:
-
-                st.session_state.team[i] = new_suggestion
-                st.rerun()
+            st.rerun()
 
 # =====================================================
-# REMOVE POKEMON
+# REMOVE
 # =====================================================
 
 for p in st.session_state.team:
@@ -201,7 +263,7 @@ for p in st.session_state.team:
         st.rerun()
 
 # =====================================================
-# TEAM POWER
+# TEAM POWER (simple)
 # =====================================================
 
 def team_power(team):
@@ -222,18 +284,16 @@ if len(st.session_state.team) >= 3:
     st.divider()
     st.subheader("🏆 Best Team of 3")
 
-    combos = itertools.combinations(st.session_state.team, 3)
-
     best = None
     best_score = 0
 
-    for c in combos:
+    for combo in itertools.combinations(st.session_state.team, 3):
 
-        score = team_power(c)
+        score = team_power(combo)
 
         if score > best_score:
             best_score = score
-            best = c
+            best = combo
 
     if best:
 
@@ -245,7 +305,7 @@ if len(st.session_state.team) >= 3:
 2. {best[1]}
 3. {best[2]}
 
-💪 Score: {best_score}
+💪 Power: {best_score}
 """
         )
 
