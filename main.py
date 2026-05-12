@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 st.title("⚔️ GL Team Forge")
-st.caption("Great League Pokémon Team Builder")
+st.caption("Great League Team Builder (PvPoke CSV)")
 
 # =====================================================
 # LOAD CSV FROM GITHUB
@@ -20,28 +20,44 @@ st.caption("Great League Pokémon Team Builder")
 
 @st.cache_data
 def load_data():
-
-    url = "cp1500_all_overall_rankings.csv"  # file in same repo
-
-    df = pd.read_csv(url)
-
+    df = pd.read_csv("cp1500_all_overall_rankings.csv")
     df.columns = df.columns.str.strip()
-
     df["Pokemon"] = df["Pokemon"].astype(str).str.strip()
-
-    # make sure numbers are numeric
-    numeric_cols = ["Score", "Attack", "Defense", "Stamina"]
-
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
     return df
 
 
 df = load_data()
+pokemon_list = sorted(df["Pokemon"].unique())
 
-pokemon_list = sorted(df["Pokemon"].dropna().unique())
+# =====================================================
+# MOVE EFFECT DATABASE (PvP style approximations)
+# =====================================================
+
+MOVE_EFFECTS = {
+    "Body Slam": "No buff/debuff (spam move)",
+    "Surf": "No buff/debuff",
+    "Hydro Pump": "High damage (no effect)",
+    "Ice Beam": "No effect",
+    "Thunderbolt": "No effect",
+    "Shadow Ball": "No effect",
+    "Psychic": "10% chance: -1 Defense",
+    "Flamethrower": "10% chance: -1 Attack",
+    "Dragon Claw": "No effect",
+    "Stone Edge": "No effect",
+    "Earthquake": "No effect",
+    "Leaf Blade": "No effect",
+    "Power-Up Punch": "100% chance: +1 Attack",
+    "Psychic Fangs": "100% chance: -1 Defense",
+    "Breaking Swipe": "100% chance: -1 Attack",
+    "Bubble Beam": "100% chance: -1 Attack",
+    "Icy Wind": "100% chance: -1 Attack",
+    "Draco Meteor": "100% chance: -2 Attack",
+    "Overheat": "100% chance: -2 Attack",
+}
+
+def move_effect(move):
+
+    return MOVE_EFFECTS.get(move, "No effect / unknown")
 
 # =====================================================
 # SESSION STATE
@@ -51,14 +67,14 @@ if "team" not in st.session_state:
     st.session_state.team = []
 
 # =====================================================
-# SEARCH SYSTEM (FIXED)
+# SEARCH
 # =====================================================
 
 st.subheader("🔍 Search Pokémon")
 
 search = st.text_input(
     "Type Pokémon name",
-    placeholder="Try: Quagsire, Lanturn, Skarmory..."
+    placeholder="Example: Quagsire"
 )
 
 def get_row(name):
@@ -66,14 +82,10 @@ def get_row(name):
 
 if search:
 
-    search_lower = search.lower().strip()
-
     matches = [
         p for p in pokemon_list
-        if search_lower in p.lower()
-    ]
-
-    matches = matches[:10]  # limit dropdown
+        if search.lower() in p.lower()
+    ][:10]
 
     if not matches:
         st.warning("No Pokémon found.")
@@ -82,22 +94,27 @@ if search:
 
             row = get_row(name)
 
-            col1, col2, col3 = st.columns([4, 3, 1])
+            col1, col2, col3 = st.columns([4, 4, 1])
 
             with col1:
                 st.markdown(f"### {name}")
                 st.caption(f"{row['Type 1']} / {row.get('Type 2','')}")
 
             with col2:
-                st.write(f"⭐ Score: {row['Score']}")
-                st.write(f"⚔️ Fast: {row['Fast Move']}")
+                st.write(f"⚡ Fast Move: {row['Fast Move']}")
+                st.write(f"🔥 Charge 1: {row['Charged Move 1']}")
+                st.write(f"💥 Effect: {move_effect(row['Charged Move 1'])}")
+
+                st.write(f"🔥 Charge 2: {row['Charged Move 2']}")
+                st.write(f"💥 Effect: {move_effect(row['Charged Move 2'])}")
 
             with col3:
                 if st.button("Add", key=f"add_{name}"):
 
-                    if name not in st.session_state.team and len(st.session_state.team) < 6:
-                        st.session_state.team.append(name)
-                        st.rerun()
+                    if len(st.session_state.team) < 6:
+                        if name not in st.session_state.team:
+                            st.session_state.team.append(name)
+                            st.rerun()
 
 # =====================================================
 # TEAM DISPLAY
@@ -116,24 +133,38 @@ for p in st.session_state.team:
     col1, col2 = st.columns([5, 1])
 
     with col1:
-        st.write(f"### {p}")
-        st.caption(f"Score: {row['Score']} | {row['Type 1']} / {row.get('Type 2','')}")
+
+        st.markdown(f"### {p}")
+
+        st.write(f"⚡ Fast Move: {row['Fast Move']}")
+        st.write(f"🔥 {row['Charged Move 1']} → {move_effect(row['Charged Move 1'])}")
+        st.write(f"🔥 {row['Charged Move 2']} → {move_effect(row['Charged Move 2'])}")
 
     with col2:
+
         if st.button("❌", key=f"remove_{p}"):
             st.session_state.team.remove(p)
             st.rerun()
 
 # =====================================================
-# TEAM SCORING
+# SIMPLE TEAM SCORING (based on stats instead of Score column)
 # =====================================================
 
-def team_score(team):
+def team_power(team):
 
-    return sum(
-        float(get_row(p)["Score"])
-        for p in team
-    )
+    total = 0
+
+    for p in team:
+
+        row = get_row(p)
+
+        total += (
+            float(row["Attack"]) +
+            float(row["Defense"]) +
+            float(row["Stamina"])
+        )
+
+    return total
 
 # =====================================================
 # BEST TEAM OF 3
@@ -146,33 +177,33 @@ if len(st.session_state.team) >= 3:
 
     combos = itertools.combinations(st.session_state.team, 3)
 
-    best_combo = None
+    best = None
     best_score = 0
 
-    for combo in combos:
+    for c in combos:
 
-        score = team_score(combo)
+        score = team_power(c)
 
         if score > best_score:
             best_score = score
-            best_combo = combo
+            best = c
 
-    if best_combo:
+    if best:
 
         st.success(
             f"""
 🔥 Best Trio:
 
-1. {best_combo[0]}
-2. {best_combo[1]}
-3. {best_combo[2]}
+1. {best[0]}
+2. {best[1]}
+3. {best[2]}
 
-⭐ Score: {best_score}
+💪 Team Power: {best_score}
 """
         )
 
 # =====================================================
-# FULL TEAM ANALYSIS
+# FULL TEAM
 # =====================================================
 
 if len(st.session_state.team) == 6:
@@ -180,20 +211,22 @@ if len(st.session_state.team) == 6:
     st.divider()
     st.subheader("🔥 Full Team Analysis")
 
-    total = team_score(st.session_state.team)
+    power = team_power(st.session_state.team)
 
-    st.success(f"""
-Total Team Score: {total}
-Average: {round(total/6, 2)}
-""")
+    st.success(
+        f"""
+Total Team Power: {power}
+Average: {round(power/6, 2)}
+"""
+    )
 
 # =====================================================
-# SIDEBAR INFO
+# SIDEBAR
 # =====================================================
 
 with st.sidebar:
 
-    st.header("📊 Stats")
+    st.header("📊 Info")
 
     st.write(f"Pokémon loaded: {len(df)}")
     st.write(f"Team size: {len(st.session_state.team)}")
