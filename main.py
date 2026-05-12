@@ -4,9 +4,13 @@ import streamlit as st
 import pandas as pd
 import itertools
 
+# =========================================================
+# PAGE CONFIG
+# =========================================================
+
 st.set_page_config(
     page_title="GL Team Forge",
-    layout="wide",
+    layout="wide"
 )
 
 # =========================================================
@@ -34,19 +38,6 @@ TYPE_WEAKNESSES = {
     "Fairy": ["Poison", "Steel"],
 }
 
-TOP_META_THREATS = [
-    "Lanturn",
-    "Registeel",
-    "Medicham",
-    "Gligar",
-    "Azumarill",
-    "Skarmory",
-    "Annihilape",
-    "Whiscash",
-    "Carbink",
-    "Bastiodon"
-]
-
 TYPE_COLORS = {
     "Normal": "#A8A77A",
     "Fire": "#EE8130",
@@ -68,6 +59,19 @@ TYPE_COLORS = {
     "Fairy": "#D685AD",
 }
 
+TOP_META_THREATS = [
+    "Lanturn",
+    "Registeel",
+    "Medicham",
+    "Gligar",
+    "Azumarill",
+    "Skarmory",
+    "Annihilape",
+    "Whiscash",
+    "Carbink",
+    "Bastiodon"
+]
+
 # =========================================================
 # SESSION STATE
 # =========================================================
@@ -75,42 +79,63 @@ TYPE_COLORS = {
 if "squad" not in st.session_state:
     st.session_state.squad = []
 
-if "data" not in st.session_state:
-    st.session_state.data = None
+if "df" not in st.session_state:
+    st.session_state.df = None
 
 # =========================================================
 # HELPERS
 # =========================================================
 
 def get_weaknesses(pokemon):
-    weak = []
 
-    t1 = pokemon.get("type1", "")
-    t2 = pokemon.get("type2", "")
+    weaknesses = []
+
+    t1 = str(pokemon.get("type1", ""))
+    t2 = str(pokemon.get("type2", ""))
 
     if t1 in TYPE_WEAKNESSES:
-        weak.extend(TYPE_WEAKNESSES[t1])
+        weaknesses.extend(TYPE_WEAKNESSES[t1])
 
-    if t2 and t2 in TYPE_WEAKNESSES:
-        weak.extend(TYPE_WEAKNESSES[t2])
+    if t2 in TYPE_WEAKNESSES:
+        weaknesses.extend(TYPE_WEAKNESSES[t2])
 
-    return list(set(weak))
+    return list(set(weaknesses))
 
 
 def role_fit_lead(row):
-    return round((row["leadScore"] * 0.6) + (row["consistencyScore"] * 0.4), 1)
+
+    return round(
+        (float(row["leadScore"]) * 0.6)
+        + (float(row["consistencyScore"]) * 0.4),
+        1
+    )
 
 
 def role_fit_switch(row):
-    bulk = (row["consistencyScore"] + row["score"]) / 2
-    return round((row["switchScore"] * 0.7) + (bulk * 0.3), 1)
+
+    bulk = (
+        float(row["consistencyScore"])
+        + float(row["score"])
+    ) / 2
+
+    return round(
+        (float(row["switchScore"]) * 0.7)
+        + (bulk * 0.3),
+        1
+    )
 
 
 def role_fit_closer(row):
-    return round((row["closerScore"] * 0.8) + (row["attackerScore"] * 0.2), 1)
+
+    return round(
+        (float(row["closerScore"]) * 0.8)
+        + (float(row["attackerScore"]) * 0.2),
+        1
+    )
 
 
-def assign_role(row):
+def best_role(row):
+
     lead = role_fit_lead(row)
     switch = role_fit_switch(row)
     closer = role_fit_closer(row)
@@ -119,50 +144,60 @@ def assign_role(row):
 
     if best == lead:
         return "🟡 Lead"
-    elif best == switch:
+
+    if best == switch:
         return "🟢 Safe Switch"
-    else:
-        return "🔴 Closer"
+
+    return "🔴 Closer"
 
 
 def duo_core_score(a, b):
-    score = 50
 
     weak_a = set(get_weaknesses(a))
     weak_b = set(get_weaknesses(b))
 
+    score = 60
+
     shared = weak_a.intersection(weak_b)
 
-    score -= len(shared) * 8
+    score -= len(shared) * 10
 
-    cover_bonus = len((weak_a.union(weak_b))) * 2
-    score += cover_bonus
+    cover = weak_a.symmetric_difference(weak_b)
+
+    score += len(cover) * 3
 
     return max(0, min(100, score))
 
 
 def trio_score(team):
+
     lead = role_fit_lead(team[0])
     switch = role_fit_switch(team[1])
     closer = role_fit_closer(team[2])
 
-    role_score = (lead + switch + closer) / 3
+    role_score = (
+        lead + switch + closer
+    ) / 3
 
     type_diversity = len(
-        set([team[0]["type1"], team[1]["type1"], team[2]["type1"]])
+        set([
+            team[0]["type1"],
+            team[1]["type1"],
+            team[2]["type1"]
+        ])
     )
 
-    diversity_score = type_diversity * 10
+    diversity_bonus = type_diversity * 10
 
     consistency = (
-        team[0]["consistencyScore"]
-        + team[1]["consistencyScore"]
-        + team[2]["consistencyScore"]
+        float(team[0]["consistencyScore"])
+        + float(team[1]["consistencyScore"])
+        + float(team[2]["consistencyScore"])
     ) / 3
 
     total = (
-        role_score * 0.4
-        + diversity_score * 0.3
+        role_score * 0.5
+        + diversity_bonus * 0.2
         + consistency * 0.3
     )
 
@@ -170,53 +205,93 @@ def trio_score(team):
 
 
 def get_line_structure(score):
+
     if score >= 82:
         return "⚡ Trio Core"
-    elif score >= 70:
+
+    if score >= 70:
         return "🔄 Duo Core + Pivot"
-    else:
-        return "💥 Unbalanced / Carry Line"
+
+    return "💥 Carry Line"
 
 
-def get_type_archetype(team):
-    types = [p["type1"] for p in team]
+def get_archetype(team):
+
+    types = [
+        team[0]["type1"],
+        team[1]["type1"],
+        team[2]["type1"]
+    ]
 
     if len(set(types)) == 3:
         return "🔵 ABC"
-    elif types[1] == types[2]:
+
+    if types[1] == types[2]:
         return "🟠 ABB"
-    elif types[0] == types[2]:
+
+    if types[0] == types[2]:
         return "🟣 ABA"
-    else:
-        return "🔵 ABC"
+
+    return "🔵 ABC"
 
 
-def build_card(pokemon):
-    role = assign_role(pokemon)
+def pokemon_card(pokemon):
 
-    weak = ", ".join(get_weaknesses(pokemon))
+    weaknesses = get_weaknesses(pokemon)
+
+    weakness_text = ", ".join(weaknesses)
+
+    role = best_role(pokemon)
+
+    type1 = pokemon.get("type1", "")
+    type2 = pokemon.get("type2", "")
+
+    color1 = TYPE_COLORS.get(type1, "#444")
+    color2 = TYPE_COLORS.get(type2, "#444")
 
     st.markdown(
-        f'''
+        f"""
         <div style="
-            border:1px solid #333;
-            padding:15px;
-            border-radius:15px;
-            margin-bottom:10px;
             background:#111;
+            padding:18px;
+            border-radius:15px;
+            border:1px solid #333;
+            margin-bottom:10px;
         ">
-            <h3>{pokemon["speciesName"]}</h3>
-            <p><b>Score:</b> {pokemon["score"]}</p>
-            <p><b>Role:</b> {role}</p>
-            <p><b>Types:</b> {pokemon["type1"]} / {pokemon["type2"]}</p>
-            <p><b>Fast Move:</b> {pokemon["fastMove"]}</p>
-            <p><b>Charged Moves:</b> {pokemon["chargedMove1"]}, {pokemon["chargedMove2"]}</p>
-            <p><b>Threatened By:</b> {weak}</p>
+            <h3>{pokemon['speciesName']}</h3>
+
+            <span style="
+                background:{color1};
+                padding:6px 10px;
+                border-radius:10px;
+                color:white;
+                font-size:14px;
+            ">
+                {type1}
+            </span>
+
+            <span style="
+                background:{color2};
+                padding:6px 10px;
+                border-radius:10px;
+                color:white;
+                font-size:14px;
+            ">
+                {type2}
+            </span>
+
+            <br><br>
+
+            <b>Overall Score:</b> {pokemon['score']}<br>
+            <b>Role:</b> {role}<br>
+            <b>Fast Move:</b> {pokemon['fastMove']}<br>
+            <b>Charged Move 1:</b> {pokemon['chargedMove1']}<br>
+            <b>Charged Move 2:</b> {pokemon['chargedMove2']}<br>
+            <b>Weak To:</b> {weakness_text}
         </div>
-        ''',
+        """,
         unsafe_allow_html=True
     )
-
 
 # =========================================================
 # HEADER
@@ -226,7 +301,7 @@ st.title("⚔️ GL Team Forge")
 st.caption("Pokémon GO Great League Team Builder")
 
 # =========================================================
-# CSV UPLOAD
+# UPLOAD CSV
 # =========================================================
 
 uploaded = st.file_uploader(
@@ -234,42 +309,48 @@ uploaded = st.file_uploader(
     type=["csv"]
 )
 
-if uploaded:
+if uploaded is not None:
+
     df = pd.read_csv(uploaded)
 
-    st.session_state.data = df
+    st.session_state.df = df
 
-    st.success(f"Loaded {len(df)} Pokémon from CSV")
+    st.success(f"Loaded {len(df)} Pokémon")
 
 # =========================================================
-# SEARCH + SQUAD BUILDER
+# SEARCH SYSTEM
 # =========================================================
 
-if st.session_state.data is not None:
+if st.session_state.df is not None:
 
-    df = st.session_state.data
+    df = st.session_state.df
+
+    st.divider()
 
     st.subheader("🔍 Search Pokémon")
 
     current_names = [
-        p["speciesName"] for p in st.session_state.squad
+        p["speciesName"]
+        for p in st.session_state.squad
     ]
 
     search = st.text_input(
-        "Search Pokémon",
-        placeholder="Type Pokémon name..."
+        "Type Pokémon Name",
+        placeholder="Start typing..."
     )
 
-    if search:
+    if search and len(st.session_state.squad) < 6:
 
         filtered = df[
             df["speciesName"]
+            .fillna("")
             .str.lower()
-            .str.contains(search.lower(), na=False)
+            .str.contains(search.lower())
         ]
 
         filtered = filtered[
-            ~filtered["speciesName"].isin(current_names)
+            ~filtered["speciesName"]
+            .isin(current_names)
         ]
 
         filtered = filtered.sort_values(
@@ -277,11 +358,15 @@ if st.session_state.data is not None:
             ascending=False
         ).head(8)
 
+        if len(filtered) == 0:
+            st.warning("No Pokémon found")
+
         for _, row in filtered.iterrows():
 
-            col1, col2 = st.columns([5, 1])
+            col1, col2 = st.columns([6, 1])
 
             with col1:
+
                 st.markdown(
                     f"""
                     **{row['speciesName']}**
@@ -291,254 +376,283 @@ if st.session_state.data is not None:
                 )
 
             with col2:
+
                 if st.button(
                     "Add",
                     key=f"add_{row['speciesName']}"
                 ):
 
-                    if len(st.session_state.squad) < 6:
-                        st.session_state.squad.append(row.to_dict())
-                        st.rerun()
+                    st.session_state.squad.append(
+                        row.to_dict()
+                    )
+
+                    st.rerun()
+
+# =========================================================
+# SQUAD
+# =========================================================
+
+if len(st.session_state.squad) > 0:
+
+    st.divider()
+
+    st.header(
+        f"👥 Squad ({len(st.session_state.squad)}/6)"
+    )
+
+    if len(st.session_state.squad) >= 6:
+        st.warning("Maximum squad size reached")
+
+    for i, pokemon in enumerate(st.session_state.squad):
+
+        col1, col2 = st.columns([12, 1])
+
+        with col1:
+            pokemon_card(pokemon)
+
+        with col2:
+
+            if st.button(
+                "❌",
+                key=f"remove_{i}"
+            ):
+
+                st.session_state.squad.pop(i)
+
+                st.rerun()
+
+# =========================================================
+# ANALYSIS
+# =========================================================
+
+if len(st.session_state.squad) >= 3:
+
+    st.divider()
+
+    st.header("📊 Squad Analysis")
+
+    squad = st.session_state.squad
+
+    squad_df = pd.DataFrame(squad)
+
+    avg_score = squad_df["score"].mean()
+
+    unique_types = len(
+        set(squad_df["type1"])
+    )
 
     # =====================================================
-    # SQUAD DISPLAY
+    # DUO CORES
+    # =====================================================
+
+    duo_cores = []
+
+    for a, b in itertools.combinations(squad, 2):
+
+        score = duo_core_score(a, b)
+
+        if score >= 65:
+
+            duo_cores.append(
+                (
+                    a["speciesName"],
+                    b["speciesName"],
+                    score
+                )
+            )
+
+    # =====================================================
+    # SHARED WEAKNESSES
+    # =====================================================
+
+    weakness_count = {}
+
+    for p in squad:
+
+        for weak in get_weaknesses(p):
+
+            weakness_count[weak] = (
+                weakness_count.get(weak, 0) + 1
+            )
+
+    shared_weaknesses = {
+        k: v
+        for k, v in weakness_count.items()
+        if v >= 3
+    }
+
+    # =====================================================
+    # SQUAD SCORE
+    # =====================================================
+
+    squad_score = (
+        avg_score * 0.4
+        + unique_types * 4
+        + len(duo_cores) * 5
+    )
+
+    squad_score = round(
+        min(squad_score, 100),
+        1
+    )
+
+    # =====================================================
+    # METRICS
+    # =====================================================
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric(
+            "Squad Score",
+            squad_score
+        )
+
+    with col2:
+        st.metric(
+            "Strong Duo Cores",
+            len(duo_cores)
+        )
+
+    with col3:
+        st.metric(
+            "Primary Type Diversity",
+            unique_types
+        )
+
+    # =====================================================
+    # WARNINGS
+    # =====================================================
+
+    st.subheader("⚠️ Warnings")
+
+    if len(shared_weaknesses) == 0:
+        st.success("No major shared weaknesses")
+
+    for weak, amount in shared_weaknesses.items():
+
+        st.error(
+            f"🔴 {amount} Pokémon weak to {weak}"
+        )
+
+    if len(duo_cores) == 0:
+
+        st.warning(
+            "🟡 NO DUO CORES FOUND"
+        )
+
+    # =====================================================
+    # DUO CORES
+    # =====================================================
+
+    st.subheader("🤝 Duo Cores")
+
+    if duo_cores:
+
+        for a, b, score in duo_cores:
+
+            st.success(
+                f"{a} + {b} — Score {score}"
+            )
+
+    else:
+
+        st.info("No strong duo cores")
+
+    # =====================================================
+    # BEST TEAMS
     # =====================================================
 
     st.divider()
 
-    st.subheader(
-        f"👥 Your Squad ({len(st.session_state.squad)}/6)"
+    st.header("🏆 Best Battle Teams")
+
+    all_teams = list(
+        itertools.combinations(squad, 3)
     )
 
-    if len(st.session_state.squad) == 6:
-        st.warning("Maximum squad size reached.")
+    scored_teams = []
 
-    for i, pokemon in enumerate(st.session_state.squad):
+    for trio in all_teams:
 
-        col1, col2 = st.columns([10, 1])
+        trio = list(trio)
 
-        with col1:
-            build_card(pokemon)
-
-        with col2:
-            if st.button("❌", key=f"remove_{i}"):
-                st.session_state.squad.pop(i)
-                st.rerun()
-
-    # =====================================================
-    # ANALYSIS
-    # =====================================================
-
-    if len(st.session_state.squad) >= 3:
-
-        st.divider()
-
-        st.header("📊 Squad Analysis")
-
-        squad_df = pd.DataFrame(st.session_state.squad)
-
-        avg_score = squad_df["score"].mean()
-
-        unique_types = len(
-            set(squad_df["type1"])
-        )
-
-        type_diversity_score = unique_types * 10
-
-        # Shared Weaknesses
-        weakness_counter = {}
-
-        for p in st.session_state.squad:
-            for weak in get_weaknesses(p):
-                weakness_counter[weak] = (
-                    weakness_counter.get(weak, 0) + 1
-                )
-
-        shared = {
-            k: v
-            for k, v in weakness_counter.items()
-            if v >= 3
-        }
-
-        # Steel Check
-        steel_answer = False
-
-        for p in st.session_state.squad:
-
-            if (
-                p["type1"] in ["Ground", "Fire", "Fighting"]
-                or p["type2"] in ["Ground", "Fire", "Fighting"]
-            ):
-                steel_answer = True
-
-        # Duo Cores
-        duo_cores = []
-
-        for a, b in itertools.combinations(
-            st.session_state.squad, 2
-        ):
-            score = duo_core_score(a, b)
-
-            if score >= 60:
-                duo_cores.append(
-                    (
-                        a["speciesName"],
-                        b["speciesName"],
-                        score
-                    )
-                )
-
-        # Squad Score
-        squad_score = (
-            avg_score * 0.3
-            + len(duo_cores) * 5
-            + type_diversity_score * 0.3
-        )
-
-        squad_score = round(min(squad_score, 100), 1)
-
-        # =================================================
-        # SUMMARY METRICS
-        # =================================================
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.metric("Overall Squad Score", squad_score)
-
-        with col2:
-            st.metric("Unique Primary Types", unique_types)
-
-        with col3:
-            st.metric("Strong Duo Cores", len(duo_cores))
-
-        # =================================================
-        # WARNINGS
-        # =================================================
-
-        st.subheader("⚠️ Warnings")
-
-        if shared:
-            for weak, amount in shared.items():
-                st.error(
-                    f"🔴 SHARED WEAKNESS — {amount} Pokémon weak to {weak}"
-                )
-
-        if not steel_answer:
-            st.warning(
-                "🟡 MISSING STEEL ANSWER"
-            )
-
-        if len(duo_cores) == 0:
-            st.warning(
-                "🟡 NO DUO CORES DETECTED"
-            )
-
-        # =================================================
-        # DUO CORES
-        # =================================================
-
-        st.subheader("🤝 Duo Cores")
-
-        if duo_cores:
-
-            for a, b, score in duo_cores:
-
-                st.success(
-                    f"{a} + {b} — Core Score {score}"
-                )
-
-        else:
-            st.info("No strong cores found.")
-
-        # =================================================
-        # BEST TEAM OF 3
-        # =================================================
-
-        st.divider()
-
-        st.header("🏆 Recommended Battle Team")
-
-        all_trios = list(
-            itertools.combinations(
-                st.session_state.squad,
-                3
-            )
-        )
-
-        scored = []
-
-        for trio in all_trios:
-
-            trio_list = list(trio)
-
-            trio_list = sorted(
-                trio_list,
-                key=lambda x: role_fit_lead(x),
-                reverse=True
-            )
-
-            score = trio_score(trio_list)
-
-            scored.append((trio_list, score))
-
-        scored = sorted(
-            scored,
-            key=lambda x: x[1],
+        trio = sorted(
+            trio,
+            key=lambda x: role_fit_lead(x),
             reverse=True
         )
 
-        best_team, best_score = scored[0]
+        score = trio_score(trio)
 
-        lead = best_team[0]
-        switch = best_team[1]
-        closer = best_team[2]
-
-        line_structure = get_line_structure(best_score)
-
-        archetype = get_type_archetype(best_team)
-
-        st.metric("Battle Trio Score", best_score)
-
-        st.markdown(f"### {line_structure}")
-        st.markdown(f"### {archetype}")
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            st.subheader("🟡 LEAD")
-            build_card(lead)
-
-        with col2:
-            st.subheader("🟢 SAFE SWITCH")
-            build_card(switch)
-
-        with col3:
-            st.subheader("🔴 CLOSER")
-            build_card(closer)
-
-        # =================================================
-        # ALL TEAMS
-        # =================================================
-
-        st.divider()
-
-        st.header("📋 All Team Combinations")
-
-        for trio, score in scored:
-
-            names = (
-                f"{trio[0]['speciesName']} / "
-                f"{trio[1]['speciesName']} / "
-                f"{trio[2]['speciesName']}"
+        scored_teams.append(
+            (
+                trio,
+                score
             )
+        )
 
-            st.markdown(
-                f"""
-                **{names}**
-                — Score: {score}
-                """
-            )
+    scored_teams = sorted(
+        scored_teams,
+        key=lambda x: x[1],
+        reverse=True
+    )
+
+    best_team, best_score = scored_teams[0]
+
+    st.metric(
+        "Best Trio Score",
+        best_score
+    )
+
+    st.markdown(
+        f"### {get_line_structure(best_score)}"
+    )
+
+    st.markdown(
+        f"### {get_archetype(best_team)}"
+    )
+
+    lead = best_team[0]
+    switch = best_team[1]
+    closer = best_team[2]
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.subheader("🟡 LEAD")
+        pokemon_card(lead)
+
+    with col2:
+        st.subheader("🟢 SAFE SWITCH")
+        pokemon_card(switch)
+
+    with col3:
+        st.subheader("🔴 CLOSER")
+        pokemon_card(closer)
+
+    # =====================================================
+    # ALL POSSIBLE TEAMS
+    # =====================================================
+
+    st.divider()
+
+    st.header("📋 All Possible Teams")
+
+    for trio, score in scored_teams:
+
+        names = (
+            f"{trio[0]['speciesName']} / "
+            f"{trio[1]['speciesName']} / "
+            f"{trio[2]['speciesName']}"
+        )
+
+        st.markdown(
+            f"""
+            **{names}**
+            — Team Score: {score}
+            """
+        )
 
 # =========================================================
 # FOOTER
