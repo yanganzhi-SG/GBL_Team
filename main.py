@@ -2,16 +2,15 @@ import streamlit as st
 import pandas as pd
 
 # =====================================================
-# PAGE SETUP
+# PAGE
 # =====================================================
 
 st.set_page_config(
-    page_title="Pokémon GO Move Checker",
+    page_title="Pokémon GO Search",
     layout="wide"
 )
 
 st.title("⚔️ Pokémon GO Move & Type Checker")
-st.caption("Search Pokémon with live autocomplete")
 
 # =====================================================
 # LOAD CSV
@@ -35,33 +34,21 @@ def load_data():
 
 df = load_data()
 
-# =====================================================
-# REMOVE DUPLICATES
-# =====================================================
-
-pokemon_names = sorted(df["Pokemon"].dropna().unique().tolist())
+pokemon_names = sorted(
+    df["Pokemon"]
+    .dropna()
+    .unique()
+    .tolist()
+)
 
 # =====================================================
 # TYPE EFFECTIVENESS
 # =====================================================
 
 TYPE_EFFECTIVENESS = {
-    "fire": {
-        "strong": ["grass", "ice", "bug", "steel"],
-        "weak": ["fire", "water", "rock", "dragon"]
-    },
     "water": {
         "strong": ["fire", "ground", "rock"],
         "weak": ["water", "grass", "dragon"]
-    },
-    "grass": {
-        "strong": ["water", "ground", "rock"],
-        "weak": ["fire", "grass", "poison", "flying", "bug", "dragon", "steel"]
-    },
-    "electric": {
-        "strong": ["water", "flying"],
-        "weak": ["electric", "grass", "dragon"],
-        "immune": ["ground"]
     },
     "ground": {
         "strong": ["fire", "electric", "poison", "rock", "steel"],
@@ -72,15 +59,32 @@ TYPE_EFFECTIVENESS = {
         "strong": ["fire", "ice", "flying", "bug"],
         "weak": ["fighting", "ground", "steel"]
     },
+    "electric": {
+        "strong": ["water", "flying"],
+        "weak": ["electric", "grass", "dragon"],
+        "immune": ["ground"]
+    },
+    "grass": {
+        "strong": ["water", "ground", "rock"],
+        "weak": ["fire", "grass", "poison", "flying", "bug", "dragon", "steel"]
+    },
+    "ice": {
+        "strong": ["grass", "ground", "flying", "dragon"],
+        "weak": ["fire", "water", "ice", "steel"]
+    },
     "ghost": {
         "strong": ["psychic", "ghost"],
-        "weak": ["dark"],
-        "immune": ["normal"]
+        "weak": ["dark"]
     },
     "dragon": {
         "strong": ["dragon"],
         "weak": ["steel"],
         "immune": ["fairy"]
+    },
+    "normal": {
+        "strong": [],
+        "weak": ["rock", "steel"],
+        "immune": ["ghost"]
     },
     "fighting": {
         "strong": ["normal", "rock", "steel", "ice", "dark"],
@@ -90,27 +94,6 @@ TYPE_EFFECTIVENESS = {
     "flying": {
         "strong": ["grass", "fighting", "bug"],
         "weak": ["electric", "rock", "steel"]
-    },
-    "ice": {
-        "strong": ["grass", "ground", "flying", "dragon"],
-        "weak": ["fire", "water", "ice", "steel"]
-    },
-    "dark": {
-        "strong": ["psychic", "ghost"],
-        "weak": ["fighting", "dark", "fairy"]
-    },
-    "steel": {
-        "strong": ["ice", "rock", "fairy"],
-        "weak": ["fire", "water", "electric", "steel"]
-    },
-    "fairy": {
-        "strong": ["fighting", "dragon", "dark"],
-        "weak": ["fire", "poison", "steel"]
-    },
-    "normal": {
-        "strong": [],
-        "weak": ["rock", "steel"],
-        "immune": ["ghost"]
     }
 }
 
@@ -142,69 +125,78 @@ MOVE_TYPES = {
 }
 
 # =====================================================
-# SEARCH
+# LIVE SEARCH
 # =====================================================
 
 st.subheader("🔍 Search Pokémon")
 
 search = st.text_input(
-    "Type Pokémon name",
-    placeholder="Example: quaq"
+    "",
+    placeholder="Type Pokémon name like: quaq"
 )
 
 selected_pokemon = None
 
-# LIVE FILTERING
+# =====================================================
+# LIVE CLICKABLE RESULTS
+# =====================================================
+
 if search:
 
     matches = [
         p for p in pokemon_names
         if search.lower() in p.lower()
-    ]
+    ][:10]
 
-    if len(matches) > 0:
+    if matches:
 
-        selected_pokemon = st.selectbox(
-            "Select Pokémon",
-            matches,
-            index=0
-        )
+        st.write("### Results")
 
-    else:
-        st.error("No Pokémon found.")
+        for pokemon in matches:
+
+            if st.button(
+                pokemon,
+                use_container_width=True,
+                key=f"search_{pokemon}"
+            ):
+                selected_pokemon = pokemon
+                st.session_state["selected_pokemon"] = pokemon
+
+# KEEP SELECTION AFTER RERUN
+if "selected_pokemon" in st.session_state:
+    selected_pokemon = st.session_state["selected_pokemon"]
 
 # =====================================================
-# DISPLAY
+# DISPLAY POKEMON
 # =====================================================
 
 if selected_pokemon:
 
-    poke_rows = df[df["Pokemon"] == selected_pokemon]
+    rows = df[df["Pokemon"] == selected_pokemon]
 
-    if len(poke_rows) > 0:
+    if not rows.empty:
 
-        row = poke_rows.iloc[0]
+        row = rows.iloc[0]
+
+        st.divider()
+
+        st.header(f"🛡️ {selected_pokemon}")
 
         type1 = str(row["Type 1"]).lower()
 
         type2 = ""
-
         if "Type 2" in row and pd.notna(row["Type 2"]):
             type2 = str(row["Type 2"]).lower()
-
-        st.divider()
-
-        st.header(selected_pokemon)
-
-        col1, col2 = st.columns(2)
 
         # =====================================================
         # TYPES
         # =====================================================
 
+        col1, col2 = st.columns(2)
+
         with col1:
 
-            st.subheader("🛡️ Types")
+            st.subheader("Types")
 
             st.success(type1.capitalize())
 
@@ -217,7 +209,7 @@ if selected_pokemon:
 
         with col2:
 
-            st.subheader("📊 Stats")
+            st.subheader("Stats")
 
             st.write(f"⚔️ Attack: {row['Attack']}")
             st.write(f"🛡️ Defense: {row['Defense']}")
@@ -246,7 +238,7 @@ if selected_pokemon:
 
                 st.markdown(f"### {move_name}")
 
-                st.write(f"Move Type: **{move_type.capitalize()}**")
+                st.write(f"Type: **{move_type.capitalize()}**")
 
                 if move_type in TYPE_EFFECTIVENESS:
 
@@ -274,38 +266,6 @@ if selected_pokemon:
                             ", ".join([x.capitalize() for x in immune])
                         )
 
-        # =====================================================
-        # WEAKNESSES
-        # =====================================================
-
-        st.divider()
-
-        st.subheader("⚠️ Type Matchups")
-
-        weak_to = []
-        resist_to = []
-
-        for atk_type, data in TYPE_EFFECTIVENESS.items():
-
-            strong = data.get("strong", [])
-            weak = data.get("weak", [])
-
-            if type1 in strong or type2 in strong:
-                weak_to.append(atk_type.capitalize())
-
-            if type1 in weak or type2 in weak:
-                resist_to.append(atk_type.capitalize())
-
-        c1, c2 = st.columns(2)
-
-        with c1:
-            st.error("Weak To")
-            st.write(", ".join(weak_to) if weak_to else "None")
-
-        with c2:
-            st.success("Resists")
-            st.write(", ".join(resist_to) if resist_to else "None")
-
 # =====================================================
 # SIDEBAR
 # =====================================================
@@ -316,7 +276,7 @@ with st.sidebar:
 
     st.write(f"Pokémon Loaded: {len(pokemon_names)}")
 
-    st.write("✅ Working live search")
-    st.write("✅ Dropdown autocomplete")
+    st.write("✅ Live clickable autocomplete")
+    st.write("✅ Instant search results")
     st.write("✅ Move effectiveness")
-    st.write("✅ Type weaknesses")
+    st.write("✅ Type checker")
