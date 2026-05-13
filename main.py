@@ -1,186 +1,319 @@
 # =========================================================
+# ADD THIS ABOVE show_move()
+# =========================================================
+
+TYPE_EFFECTIVENESS = {
+    "Normal": {
+        "strong": [],
+        "weak": ["Rock", "Steel"],
+        "immune": ["Ghost"]
+    },
+
+    "Fire": {
+        "strong": ["Grass", "Ice", "Bug", "Steel"],
+        "weak": ["Fire", "Water", "Rock", "Dragon"],
+        "immune": []
+    },
+
+    "Water": {
+        "strong": ["Fire", "Ground", "Rock"],
+        "weak": ["Water", "Grass", "Dragon"],
+        "immune": []
+    },
+
+    "Electric": {
+        "strong": ["Water", "Flying"],
+        "weak": ["Electric", "Grass", "Dragon"],
+        "immune": ["Ground"]
+    },
+
+    "Grass": {
+        "strong": ["Water", "Ground", "Rock"],
+        "weak": ["Fire", "Grass", "Poison", "Flying", "Bug", "Dragon", "Steel"],
+        "immune": []
+    },
+
+    "Ice": {
+        "strong": ["Grass", "Ground", "Flying", "Dragon"],
+        "weak": ["Fire", "Water", "Ice", "Steel"],
+        "immune": []
+    },
+
+    "Fighting": {
+        "strong": ["Normal", "Ice", "Rock", "Dark", "Steel"],
+        "weak": ["Poison", "Flying", "Psychic", "Bug", "Fairy"],
+        "immune": ["Ghost"]
+    },
+
+    "Poison": {
+        "strong": ["Grass", "Fairy"],
+        "weak": ["Poison", "Ground", "Rock", "Ghost"],
+        "immune": ["Steel"]
+    },
+
+    "Ground": {
+        "strong": ["Fire", "Electric", "Poison", "Rock", "Steel"],
+        "weak": ["Grass", "Bug"],
+        "immune": ["Flying"]
+    },
+
+    "Flying": {
+        "strong": ["Grass", "Fighting", "Bug"],
+        "weak": ["Electric", "Rock", "Steel"],
+        "immune": []
+    },
+
+    "Psychic": {
+        "strong": ["Fighting", "Poison"],
+        "weak": ["Psychic", "Steel"],
+        "immune": ["Dark"]
+    },
+
+    "Bug": {
+        "strong": ["Grass", "Psychic", "Dark"],
+        "weak": ["Fire", "Fighting", "Poison", "Flying", "Ghost", "Steel", "Fairy"],
+        "immune": []
+    },
+
+    "Rock": {
+        "strong": ["Fire", "Ice", "Flying", "Bug"],
+        "weak": ["Fighting", "Ground", "Steel"],
+        "immune": []
+    },
+
+    "Ghost": {
+        "strong": ["Psychic", "Ghost"],
+        "weak": ["Dark"],
+        "immune": ["Normal"]
+    },
+
+    "Dragon": {
+        "strong": ["Dragon"],
+        "weak": ["Steel"],
+        "immune": ["Fairy"]
+    },
+
+    "Dark": {
+        "strong": ["Psychic", "Ghost"],
+        "weak": ["Fighting", "Dark", "Fairy"],
+        "immune": []
+    },
+
+    "Steel": {
+        "strong": ["Ice", "Rock", "Fairy"],
+        "weak": ["Fire", "Water", "Electric", "Steel"],
+        "immune": []
+    },
+
+    "Fairy": {
+        "strong": ["Fighting", "Dragon", "Dark"],
+        "weak": ["Fire", "Poison", "Steel"],
+        "immune": []
+    }
+}
+
+
+# =========================================================
 # REPLACE YOUR OLD show_move FUNCTION WITH THIS
 # =========================================================
 
 def show_move(move_name):
 
-    original_move_name = str(move_name).strip()
+    try:
 
-    clean_move_name = clean_text(move_name)
+        original_move_name = str(move_name).strip()
 
-    # =====================================================
-    # FIND MOVE
-    # =====================================================
+        clean_move_name = clean_text(original_move_name)
 
-    move_data = fast_moves_df[
-        fast_moves_df["CleanMove"] == clean_move_name
-    ]
+        # =================================================
+        # SEARCH FAST MOVES
+        # =================================================
 
-    if move_data.empty:
-
-        move_data = charged_moves_df[
-            charged_moves_df["CleanMove"] == clean_move_name
+        move_data = fast_moves_df[
+            fast_moves_df["CleanMove"] == clean_move_name
         ]
 
-    # =====================================================
-    # MOVE NOT FOUND
-    # =====================================================
+        # =================================================
+        # SEARCH CHARGED MOVES
+        # =================================================
 
-    if move_data.empty:
+        if move_data.empty:
 
-        st.warning(f"Move not found: {original_move_name}")
-        return
+            move_data = charged_moves_df[
+                charged_moves_df["CleanMove"] == clean_move_name
+            ]
 
-    row = move_data.iloc[0]
+        # =================================================
+        # MOVE NOT FOUND
+        # =================================================
 
-    move_type = str(row.get("Type", "Normal")).title().strip()
+        if move_data.empty:
 
-    category = str(row.get("Category", "Unknown")).strip()
+            st.warning(f"Move not found: {original_move_name}")
+            return
 
-    color = TYPE_COLORS.get(move_type, "#666666")
+        row = move_data.iloc[0]
 
-    # =====================================================
-    # TYPE EFFECTIVENESS
-    # =====================================================
+        move_type = str(
+            row.get("Type", "Normal")
+        ).title().strip()
 
-    effectiveness = TYPE_EFFECTIVENESS.get(
-        move_type,
-        {
-            "strong": [],
-            "weak": [],
-            "immune": []
-        }
-    )
+        category = str(
+            row.get("Category", "Unknown")
+        ).strip()
 
-    strong_against = effectiveness["strong"]
-    weak_against = effectiveness["weak"]
-    immune_against = effectiveness["immune"]
+        color = TYPE_COLORS.get(
+            move_type,
+            "#666666"
+        )
 
-    # =====================================================
-    # MAIN MOVE CARD
-    # =====================================================
+        # =================================================
+        # CARD
+        # =================================================
 
-    st.markdown(
-        f"""
-        <div style="
-            background-color:{color};
-            padding:20px;
-            border-radius:15px;
-            color:white;
-            margin-bottom:15px;
-        ">
-            <h2 style="margin:0;">
-                {original_move_name}
-            </h2>
-
-            <p style="
-                font-size:18px;
-                margin-top:8px;
+        st.markdown(
+            f"""
+            <div style="
+                background-color:{color};
+                padding:20px;
+                border-radius:15px;
+                color:white;
+                margin-bottom:20px;
             ">
-                {move_type} • {category}
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+                <h2>{original_move_name}</h2>
+                <h4>{move_type} • {category}</h4>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # =====================================================
-    # SUPER EFFECTIVE
-    # =====================================================
+        # =================================================
+        # EFFECTIVENESS
+        # =================================================
 
-    st.subheader("✅ Super Effective Against")
+        effectiveness = TYPE_EFFECTIVENESS.get(
+            move_type,
+            {
+                "strong": [],
+                "weak": [],
+                "immune": []
+            }
+        )
 
-    if len(strong_against) > 0:
+        strong_against = effectiveness["strong"]
+        weak_against = effectiveness["weak"]
+        immune_against = effectiveness["immune"]
 
-        cols = st.columns(len(strong_against))
+        # =================================================
+        # SUPER EFFECTIVE
+        # =================================================
 
-        for i, t in enumerate(strong_against):
+        st.subheader("✅ Super Effective Against")
 
-            c = TYPE_COLORS.get(t, "#666666")
+        if strong_against:
 
-            cols[i].markdown(
-                f"""
-                <div style="
-                    background-color:{c};
-                    color:white;
-                    padding:10px;
-                    border-radius:10px;
-                    text-align:center;
-                    font-weight:bold;
-                    margin-bottom:10px;
-                ">
-                    {t}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            cols = st.columns(len(strong_against))
 
-    else:
+            for i, t in enumerate(strong_against):
 
-        st.write("None")
+                badge_color = TYPE_COLORS.get(
+                    t,
+                    "#666666"
+                )
 
-    # =====================================================
-    # NOT VERY EFFECTIVE
-    # =====================================================
+                cols[i].markdown(
+                    f"""
+                    <div style="
+                        background-color:{badge_color};
+                        color:white;
+                        padding:10px;
+                        border-radius:10px;
+                        text-align:center;
+                        font-weight:bold;
+                        margin-bottom:10px;
+                    ">
+                        {t}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-    st.subheader("❌ Not Very Effective Against")
+        else:
 
-    if len(weak_against) > 0:
+            st.write("None")
 
-        cols = st.columns(len(weak_against))
+        # =================================================
+        # NOT VERY EFFECTIVE
+        # =================================================
 
-        for i, t in enumerate(weak_against):
+        st.subheader("❌ Not Very Effective Against")
 
-            c = TYPE_COLORS.get(t, "#666666")
+        if weak_against:
 
-            cols[i].markdown(
-                f"""
-                <div style="
-                    background-color:{c};
-                    color:white;
-                    padding:10px;
-                    border-radius:10px;
-                    text-align:center;
-                    font-weight:bold;
-                    margin-bottom:10px;
-                ">
-                    {t}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            cols = st.columns(len(weak_against))
 
-    else:
+            for i, t in enumerate(weak_against):
 
-        st.write("None")
+                badge_color = TYPE_COLORS.get(
+                    t,
+                    "#666666"
+                )
 
-    # =====================================================
-    # IMMUNE
-    # =====================================================
+                cols[i].markdown(
+                    f"""
+                    <div style="
+                        background-color:{badge_color};
+                        color:white;
+                        padding:10px;
+                        border-radius:10px;
+                        text-align:center;
+                        font-weight:bold;
+                        margin-bottom:10px;
+                    ">
+                        {t}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-    if len(immune_against) > 0:
+        else:
 
-        st.subheader("🚫 No Effect Against")
+            st.write("None")
 
-        cols = st.columns(len(immune_against))
+        # =================================================
+        # IMMUNE
+        # =================================================
 
-        for i, t in enumerate(immune_against):
+        if immune_against:
 
-            c = TYPE_COLORS.get(t, "#666666")
+            st.subheader("🚫 No Effect Against")
 
-            cols[i].markdown(
-                f"""
-                <div style="
-                    background-color:{c};
-                    color:white;
-                    padding:10px;
-                    border-radius:10px;
-                    text-align:center;
-                    font-weight:bold;
-                    margin-bottom:10px;
-                ">
-                    {t}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            cols = st.columns(len(immune_against))
+
+            for i, t in enumerate(immune_against):
+
+                badge_color = TYPE_COLORS.get(
+                    t,
+                    "#666666"
+                )
+
+                cols[i].markdown(
+                    f"""
+                    <div style="
+                        background-color:{badge_color};
+                        color:white;
+                        padding:10px;
+                        border-radius:10px;
+                        text-align:center;
+                        font-weight:bold;
+                        margin-bottom:10px;
+                    ">
+                        {t}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+    except Exception as e:
+
+        st.error(f"Error showing move: {e}")
