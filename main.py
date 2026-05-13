@@ -10,7 +10,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚔️ Pokémon GO Search Engine")
+st.title("⚔️ Pokémon GO Search")
 
 # =====================================================
 # LOAD CSV
@@ -132,36 +132,39 @@ if "selected_pokemon" not in st.session_state:
     st.session_state.selected_pokemon = None
 
 # =====================================================
-# SEARCH
+# SEARCH INPUT
 # =====================================================
 
 st.subheader("🔍 Search Pokémon")
 
 search = st.text_input(
     "",
-    placeholder="Type like: quaq"
+    placeholder="Type: qu"
 )
 
 # =====================================================
-# LIVE RESULTS
+# LIVE STARTS-WITH SEARCH
 # =====================================================
 
-if search.strip() != "":
+if search:
+
+    search_lower = search.lower().strip()
 
     matches = [
         p for p in pokemon_names
-        if search.lower() in p.lower()
+        if p.lower().startswith(search_lower)
     ]
 
     if len(matches) > 0:
 
-        st.write("### Matching Pokémon")
+        st.write("### Pokémon Results")
 
-        for pokemon in matches[:10]:
+        for pokemon in matches[:15]:
 
+            # clickable result row
             if st.button(
-                pokemon,
-                key=f"btn_{pokemon}",
+                f"⚔️ {pokemon}",
+                key=f"pokemon_{pokemon}",
                 use_container_width=True
             ):
                 st.session_state.selected_pokemon = pokemon
@@ -170,7 +173,7 @@ if search.strip() != "":
         st.warning("No Pokémon found")
 
 # =====================================================
-# GET SELECTED POKEMON
+# SELECTED POKEMON
 # =====================================================
 
 selected_pokemon = st.session_state.selected_pokemon
@@ -181,11 +184,11 @@ selected_pokemon = st.session_state.selected_pokemon
 
 if selected_pokemon:
 
-    rows = df[df["Pokemon"] == selected_pokemon]
+    pokemon_data = df[df["Pokemon"] == selected_pokemon]
 
-    if not rows.empty:
+    if not pokemon_data.empty:
 
-        row = rows.iloc[0]
+        row = pokemon_data.iloc[0]
 
         st.divider()
 
@@ -230,21 +233,21 @@ if selected_pokemon:
 
         st.subheader("⚔️ Moves")
 
-        moves = [
-            ("Fast Move", str(row["Fast Move"]).strip()),
-            ("Charged Move 1", str(row["Charged Move 1"]).strip()),
-            ("Charged Move 2", str(row["Charged Move 2"]).strip())
+        move_list = [
+            str(row["Fast Move"]).strip(),
+            str(row["Charged Move 1"]).strip(),
+            str(row["Charged Move 2"]).strip()
         ]
 
-        for move_type_name, move_name in moves:
+        for move in move_list:
 
-            move_type = MOVE_TYPES.get(move_name, "unknown")
+            move_type = MOVE_TYPES.get(move, "unknown")
 
             with st.container(border=True):
 
-                st.markdown(f"### {move_name}")
+                st.markdown(f"### {move}")
 
-                st.write(f"Move Type: **{move_type.capitalize()}**")
+                st.write(f"Type: **{move_type.capitalize()}**")
 
                 if move_type in TYPE_EFFECTIVENESS:
 
@@ -282,7 +285,7 @@ with st.sidebar:
 
     st.write(f"Pokémon Loaded: {len(pokemon_names)}")
 
-    st.write("✅ Live autocomplete")
-    st.write("✅ Clickable suggestions")
-    st.write("✅ Move effectiveness")
-    st.write("✅ Type info")
+    st.write("✅ Proper starts-with search")
+    st.write("✅ Instant clickable list")
+    st.write("✅ No dropdown needed")
+    st.write("✅ Live filtering")
