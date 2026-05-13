@@ -13,7 +13,7 @@ st.set_page_config(
 st.title("⚔️ Pokémon GO Search")
 
 # =========================================================
-# LOAD CSV
+# LOAD DATA
 # =========================================================
 
 @st.cache_data
@@ -39,6 +39,17 @@ pokemon_names = sorted(
     .dropna()
     .unique()
     .tolist()
+)
+
+# =========================================================
+# SEARCHABLE AUTOCOMPLETE
+# =========================================================
+
+selected_pokemon = st.selectbox(
+    "🔍 Search Pokémon",
+    options=pokemon_names,
+    index=None,
+    placeholder="Type qu..."
 )
 
 # =========================================================
@@ -119,63 +130,12 @@ TYPE_EFFECTIVENESS = {
 }
 
 # =========================================================
-# SESSION STATE
+# SHOW POKEMON
 # =========================================================
 
-if "selected_pokemon" not in st.session_state:
-    st.session_state.selected_pokemon = ""
+if selected_pokemon:
 
-# =========================================================
-# SEARCH INPUT
-# =========================================================
-
-search = st.text_input(
-    "🔍 Search Pokémon",
-    value="",
-    placeholder="Type qu..."
-)
-
-# =========================================================
-# LIVE SEARCH RESULTS
-# =========================================================
-
-if search != "" and st.session_state.selected_pokemon == "":
-
-    matches = []
-
-    for pokemon in pokemon_names:
-
-        if pokemon.lower().startswith(search.lower()):
-            matches.append(pokemon)
-
-    if len(matches) > 0:
-
-        st.markdown("### Pokémon Results")
-
-        for pokemon in matches[:15]:
-
-            # THIS MAKES CLICKABLE LIVE RESULTS
-            if st.button(
-                pokemon,
-                key=pokemon,
-                use_container_width=True
-            ):
-
-                # SAVE SELECTED POKEMON
-                st.session_state.selected_pokemon = pokemon
-
-                # INSTANTLY REFRESH PAGE
-                st.rerun()
-
-# =========================================================
-# SHOW SELECTED POKEMON
-# =========================================================
-
-selected = st.session_state.selected_pokemon
-
-if selected != "":
-
-    pokemon_data = df[df["Pokemon"] == selected]
+    pokemon_data = df[df["Pokemon"] == selected_pokemon]
 
     if not pokemon_data.empty:
 
@@ -183,17 +143,7 @@ if selected != "":
 
         st.divider()
 
-        st.header(f"⚔️ {selected}")
-
-        # =====================================================
-        # BACK BUTTON
-        # =====================================================
-
-        if st.button("⬅️ Back To Search"):
-
-            st.session_state.selected_pokemon = ""
-
-            st.rerun()
+        st.header(f"⚔️ {selected_pokemon}")
 
         # =====================================================
         # TYPES
@@ -287,17 +237,3 @@ if selected != "":
                             "🚫 No Effect Against: "
                             + ", ".join(data["immune"])
                         )
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-
-with st.sidebar:
-
-    st.header("📘 Features")
-
-    st.write("✅ Live search")
-    st.write("✅ No enter needed")
-    st.write("✅ Click Pokémon instantly")
-    st.write("✅ Results disappear after click")
-    st.write("✅ Back button")
